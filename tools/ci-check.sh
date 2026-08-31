@@ -8,6 +8,8 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 PASS=0; FAIL=0
+# Python 选择：优先后端 venv（依赖齐全），否则回退系统 python3
+if [ -x backend/.venv/bin/python ]; then PY=backend/.venv/bin/python; else PY=python3; fi
 step() {
   local name="$1"; shift
   echo "=== [CI] $name ==="
@@ -19,10 +21,10 @@ step() {
 }
 
 # 1) 语法编译：全量 py_compile（最快发现"改崩了"）
-step "py_compile" python3 -m compileall -q backend/app
+step "py_compile" "$PY" -m compileall -q backend/app
 
 # 2) Sensors 单测：LLM JSON 校验器（残缺输入必须报错而非静默通过）
-step "validators-test" python3 - <<'PY'
+step "validators-test" "$PY" - <<'PY'
 import sys
 sys.path.insert(0, "backend")
 from pydantic import BaseModel

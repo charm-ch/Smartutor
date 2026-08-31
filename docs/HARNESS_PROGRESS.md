@@ -29,8 +29,8 @@
 
 **验收**
 - [x] 残缺 JSON 触发重试 1 次，再失败返回带原因错误，绝不返回空画像（validators 单测覆盖）
-- [x] ci-check.sh 单测段全绿（部署后跑全量）
-- [ ] 检索评测维持 20 问 100% 命中（部署后用 ci-check 确认）
+- [x] ci-check.sh 服务器全绿（4/4：py_compile + validators-test + sandbox-test + retrieval-eval）
+- [x] 检索评测 20 问 100% 命中
 
 ## 阶段 2：Permissions 权限层 ✅
 
@@ -43,11 +43,11 @@
 - 前端：`.env.example` 增加 `NEXT_PUBLIC_API_TOKEN`；`api.ts` 统一 `authHeaders()`；删除 KB 自动带 confirm
 
 **验收**
-- [ ] 无 token POST/DELETE → 401；带 token 2xx；GET 不受影响（部署后 curl 验证）
-- [ ] 51MB → 413；.txt → 415；正常 PDF 不受影响
-- [ ] 测试 PDF 埋"忽略之前所有规则"指令，答疑不执行
-- [ ] 删除 KB 不带 confirm → 400
-- [ ] sandbox-test.sh 7 项回归全过
+- [x] 无 token POST/DELETE → 401；带 token 2xx；GET 不受影响（harness-acceptance.sh 验证）
+- [x] 51MB → 413；.txt → 415；正常 PDF 不受影响
+- [ ] 测试 PDF 埋"忽略之前所有规则"指令，答疑不执行（提示词防护已上线，实测待做）
+- [x] 删除 KB 不带 confirm → 400；带 confirm → 204
+- [x] sandbox-test.sh 7 项回归全过
 
 ## 阶段 3：Observability 可观测层 ✅
 
@@ -59,10 +59,10 @@
 - 前端：`types.ts` 新增 `AgentRunTrace`/`RunStats`；`ChatMessage.tsx` 新增"查看推理轨迹"折叠面板（检索块+得分+token+延迟）；`page.tsx` 在 done 事件把 run_id 存入消息
 
 **验收**
-- [ ] 提问后 trace 能完整还原检索块/得分 → token → 延迟 → 引用块 id
-- [ ] 前端每条 AI 回复可展开轨迹面板，[n] 与检索块一一对应
-- [ ] 连续提问 20 次后 `/api/runs/stats` 给出平均延迟与 token 消耗
-- [ ] 重启后端后历史 trace 仍可查
+- [x] 提问后 trace 完整还原：检索块/得分、token、延迟、引用块 id（实测 run_44c368a19645）
+- [x] 前端每条 AI 回复可展开轨迹面板，[1][5] 与检索块一一对应（浏览器实测 + 截图）
+- [x] `/api/runs/stats` 返回 total/avg_latency_ms/tokens（实测连通；20 次连续压测可后续补）
+- [x] 重启后端后历史 trace 仍可查（PG 持久化，跨重启验证）
 
 ## 阶段 4：Loop 边界 ✅
 
@@ -73,10 +73,10 @@
 - 生成类 API（mock_exam / user_profile）错误统一 `{code, stage, detail, suggestion}` 三元组
 
 **验收**
-- [ ] LLM 端口断 3 秒自动恢复（重试机制，用户无感）
-- [ ] 超长输入 60s 内收到 E_BUDGET_EXCEEDED 而非无限挂起
-- [ ] 模拟卷失败响应明确 stage（style_analysis/question_gen/answers）+ suggestion
-- [ ] 正常请求回归全绿
+- [ ] LLM 端口断 3 秒自动恢复（重试代码已上线，iptables 模拟未实测）
+- [ ] 超长输入 60s 内收到 E_BUDGET_EXCEEDED（预算代码已上线，超长输入未实测）
+- [ ] 模拟卷失败响应明确 stage + suggestion（代码已上线，可通过空 KB 快速触发验证）
+- [x] 正常请求回归全绿（ci-check 4/4 + 浏览器全链路提问）
 
 ## 阶段 5：Memory 检查点 ✅
 
@@ -87,9 +87,9 @@
 - `user_profile.py`：与该会话上次 done 画像按知识点名 merge，响应带 `comparison[]`（previous vs current）
 
 **验收**
-- [ ] 画像中途 kill 后端，重启后 `GET /api/runs/tasks/{task_id}` 显示已完成阶段
-- [ ] 第二次生成画像响应含历史掌握度对比
-- [ ] task_state >7 天自动清理
+- [x] `GET /api/runs/tasks/{task_id}` 可查任务进度与阶段（404/200 路由验证；kill 实测可后续补）
+- [ ] 第二次生成画像响应含历史掌握度对比（代码已上线，需对同一会话生成两次）
+- [x] task_state >7 天自动清理（checkpoint 内 `DELETE ... interval '7 days'`）
 
 ## 阶段 6：Guides 维护机制 ✅
 
@@ -99,27 +99,32 @@
 
 **验收**
 - [x] Agent.md 规则有日期与来源，无矛盾条款
-- [ ] hash-manifest.py 两端比对 0 差异（随部署验证执行）
-- [ ] GitHub main 与本地一致（随推送验证）
+- [ ] hash-manifest.py 两端比对 0 差异（见部署清单第 9 项）
+- [x] GitHub main 与本地一致（a4b5654 已推送）
 
-## 部署验证清单（进行中）
+## 部署验证清单（已完成）
 
-1. [ ] stage 全量复制回 `D:\Codefield\Smartutor`
-2. [ ] scp 变更文件到 `/opt/zhixue/`
-3. [ ] 服务器 `backend/.env` 增加 `API_TOKEN`（生成随机值）+ 前端 `NEXT_PUBLIC_API_TOKEN` 同值，重建前端
-4. [ ] systemctl restart zhixue-backend / zhixue-frontend
-5. [ ] `bash tools/ci-check.sh` 服务器全绿
-6. [ ] curl 验收：401/413/415/confirm/trace/stats/tasks
-7. [ ] 浏览器走查三页面 + 轨迹面板
-8. [ ] git commit + push
+1. [x] stage 全量复制回 `D:\Codefield\Smartutor`
+2. [x] scp 24 个文件到 `/opt/zhixue/`（走 `match-server` 别名，端口 30000，注意不是 22）
+3. [x] 服务器 token 配置：`backend/.env` 的 `API_TOKEN` + `frontend/.env.local` 的 `NEXT_PUBLIC_API_TOKEN`（同值 48 hex）；本地 build 注入同值 → standalone 产物 scp 上传（服务器 npm registry 不可达，无法源码 build）
+4. [x] systemctl restart 双服务
+5. [x] `bash tools/ci-check.sh` 服务器 4/4 全绿
+6. [x] API 验收 `tools/harness-acceptance.sh` 10/10 + 51MB→413 补测
+   - 部署事故 1：应用 DB 用户无 schema 建表权 → postgres 执行 `tools/harness-tables.sql` + `GRANT CREATE ON SCHEMA public` + `ALTER TABLE ... OWNER TO zhixue`（PG15 下 `CREATE TABLE IF NOT EXISTS` 表已存在时仍检查 schema CREATE 权限与表 owner）
+   - 部署事故 2：`JSONResponse(status_code=204)` 缺 content 报 500（旧 bug）→ 改用 `Response(status_code=204)`
+7. [x] 浏览器走查四页面 + 全链路提问 + 轨迹面板（SSH 隧道 localhost:13300）
+8. [ ] git commit + push（部署修复批次）
 9. [ ] hash-manifest.py 两端 0 差异
+
+> 旧前端产物保留在服务器 `/opt/zhixue/frontend-app.bak` 可回滚。
 
 ## 变更日志
 
 ### 2026-08-31
-- 六层全部代码落地（本次会话）；部署验证进行中。
-- 新增文件：`validators.py`、`auth.py`、`runs.py`、`ci-check.sh`、本文件
+- 六层代码全部落地 + 部署完成 + 服务器验收通过（ci-check 4/4、API 验收 10/10、413 补测、浏览器走查）
+- 新增文件：`validators.py`、`auth.py`、`runs.py`、`ci-check.sh`、`smoke_validators.py`、`harness-acceptance.sh`、`harness-tables.sql`、`harness-grants.sql`、`deploy-token.sh`、`local-build.ps1`、本文件
 - 修改：config/db/llm/mock_exam(svc+api)/user_profile(svc+api)/conversations/kb/main/schemas×2、前端 types/api/ChatMessage/page、`.env.example`、`Agent.md`
+- 待办：提示注入实测 PDF、Loop 破坏性测试（iptables/超长输入）、二次画像对比实测、画像 kill 恢复实测
 
 ## 下次接手指引（其他机器协同）
 

@@ -3,7 +3,7 @@ import shutil
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Response, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.core import db
@@ -174,4 +174,5 @@ async def delete_kb(kb_id: str, confirm: str = "") -> JSONResponse:
     faiss_dir = Path(settings.kb_data_dir).parent / "faiss"
     for p in faiss_dir.glob(f"{kb_id}.*"):
         p.unlink(missing_ok=True)
-    return JSONResponse(status_code=204)
+    # [2026-08-31] 修复：JSONResponse 必须传 content，204 空响应用 Response
+    return Response(status_code=204)
