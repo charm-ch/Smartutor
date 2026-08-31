@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-50 text-gray-900;
+}
+
+/* 引用标记 [1] 的样式（在回答文本中高亮） */
+.citation-ref {
+  @apply inline-flex items-center justify-center min-w-5 h-5 px-1 mx-0.5 rounded text-xs font-medium bg-citation-bg text-blue-700 border border-citation-border align-middle cursor-pointer;
+}
+
+.citation-ref-unverified {
+  @apply bg-orange-50 text-orange-700 border-orange-300;
+}
