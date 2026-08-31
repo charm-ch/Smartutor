@@ -22,6 +22,13 @@ class UserProfileRequest(BaseModel):
     conversation_id: str = Field(..., description="会话ID")
 
 
+class MasteryComparison(BaseModel):
+    """掌握度历史对比（Harness·Memory：增量画像）。"""
+    name: str = Field(..., description="知识点名称")
+    previous_mastery: float = Field(..., description="上次掌握度")
+    current_mastery: float = Field(..., description="本次掌握度")
+
+
 class UserProfileResponse(BaseModel):
     """用户画像响应。"""
     knowledge_points: List[KnowledgePoint] = Field(default_factory=list, description="知识点掌握情况")
@@ -29,3 +36,7 @@ class UserProfileResponse(BaseModel):
     strong_points: List[str] = Field(default_factory=list, description="优势领域")
     suggestions: List[str] = Field(default_factory=list, description="学习建议")
     statistics: UserProfileStatistics = Field(default_factory=UserProfileStatistics, description="学习统计")
+    # [2026-08-31] Harness 加固新增字段
+    task_id: Optional[str] = Field(default=None, description="本次生成任务的检查点 ID")
+    parse_status: Optional[str] = Field(default=None, description="LLM 输出解析状态 ok/retried_ok/failed")
+    comparison: List[MasteryComparison] = Field(default_factory=list, description="与上次画像的掌握度对比")

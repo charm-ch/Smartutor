@@ -15,3 +15,5 @@ class MockExamResponse(BaseModel):
     exam: str = Field(..., description="模拟试题内容（Markdown）")
     answers: str = Field(default="", description="参考答案（Markdown）")
     analysis: str = Field(default="", description="题目风格分析")
+    # [2026-08-31] Harness·Memory：任务检查点 ID，可用于 GET /api/tasks/{task_id} 查进度
+    task_id: str | None = Field(default=None, description="本次生成任务的检查点 ID")

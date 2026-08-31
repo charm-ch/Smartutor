@@ -109,12 +109,25 @@ export default function Home() {
             setMessages((prev) => {
               const next = [...prev];
               const last = next[next.length - 1];
+              const suffix = ev.data.suggestion ? `\n💡 ${ev.data.suggestion}` : "";
               next[next.length - 1] = {
                 ...last,
-                content: last.content || `⚠️ ${ev.data.message}（${ev.data.code}）`,
+                content: last.content || `⚠️ ${ev.data.message}（${ev.data.code}）${suffix}`,
               };
               return next;
             });
+            break;
+          case "done":
+            // [2026-08-31] Harness·Observability：记录 run_id，供轨迹面板查询
+            if (ev.data.run_id) {
+              const rid = ev.data.run_id;
+              setMessages((prev) => {
+                const next = [...prev];
+                const last = next[next.length - 1];
+                next[next.length - 1] = { ...last, run_id: rid };
+                return next;
+              });
+            }
             break;
           default:
             break;

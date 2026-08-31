@@ -58,12 +58,15 @@ async def upload_document(
 ) -> KBDocOut:
     if await db.fetch_one("SELECT id FROM kb WHERE id=%s", (kb_id,)) is None:
         raise HTTPException(status_code=404, detail={"code": "E_NOT_FOUND", "message": "知识库不存在"})
+    # [2026-08-31] Harness·Permissions：上传校验（类型 + 大小），超限明确返 413/415
     if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail={"code": "E_VALIDATION", "message": "仅支持 PDF"})
+        raise HTTPException(status_code=415, detail={"code": "E_UNSUPPORTED_TYPE", "message": "仅支持 PDF 文件"})
+    if file.content_type and file.content_type not in ("application/pdf", "application/octet-stream"):
+        raise HTTPException(status_code=415, detail={"code": "E_UNSUPPORTED_TYPE", "message": f"不支持的类型：{file.content_type}，仅接受 PDF"})
 
     content = await file.read()
     if len(content) > _MAX_PDF_SIZE:
-        raise HTTPException(status_code=400, detail={"code": "E_VALIDATION", "message": "文件超过 50MB"})
+        raise HTTPException(status_code=413, detail={"code": "E_PAYLOAD_TOO_LARGE", "message": "文件超过 50MB 上限"})
 
     doc_id = _new_id("doc")
     upload_dir = Path(settings.kb_data_dir) / kb_id
@@ -151,7 +154,18 @@ async def list_kbs() -> list[KBOut]:
 
 
 @router.delete("/{kb_id}", status_code=204)
-async def delete_kb(kb_id: str) -> JSONResponse:
+async def delete_kb(kb_id: str, confirm: str = "") -> JSONResponse:
+    """删除知识库。
+
+    [2026-08-31] Harness·Permissions：破坏性操作需显式 confirm=<kb_name>，
+    防止误删/越权批量删除（不可逆操作的可逆性闸门）。
+    """
+    if confirm != kb_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "E_CONFIRM_REQUIRED",
+                   "message": f"删除知识库为不可逆操作，请传 confirm={kb_id} 确认"},
+        )
     await db.execute("DELETE FROM kb WHERE id=%s", (kb_id,))
     # 清理本地文件与索引
     kb_dir = Path(settings.kb_data_dir) / kb_id

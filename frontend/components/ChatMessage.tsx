@@ -1,11 +1,76 @@
 "use client";
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import CitationCard from "./CitationCard";
 import RunResultPanel from "./RunResultPanel";
-import type { Message } from "@/lib/types";
+import { getRunTrace } from "@/lib/api";
+import type { AgentRunTrace, Message } from "@/lib/types";
+
+/**
+ * [2026-08-31] Harness·Observability：推理轨迹折叠面板。
+ * 展示检索块列表（含得分）、token 用量、延迟，引用编号 [n] 与检索块一一对应。
+ */
+function TracePanel({ runId }: { runId: string }) {
+  const [open, setOpen] = useState(false);
+  const [trace, setTrace] = useState<AgentRunTrace | null>(null);
+  const [err, setErr] = useState("");
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && !trace && !err) {
+      getRunTrace(runId)
+        .then(setTrace)
+        .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={toggle}
+        className="mt-2 text-xs text-gray-400 hover:text-blue-500"
+      >
+        ▸ 查看推理轨迹
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs">
+      <button onClick={toggle} className="text-gray-400 hover:text-blue-500">
+        ▾ 收起轨迹
+      </button>
+      {err && <p className="mt-1 text-orange-600">轨迹加载失败：{err}</p>}
+      {trace && (
+        <div className="mt-1 space-y-1">
+          <div className="text-gray-500">
+            延迟 {(trace.latency_ms / 1000).toFixed(1)}s ·
+            prompt {trace.prompt_tokens} tok ·
+            completion {trace.completion_tokens} tok
+          </div>
+          {trace.retrieved.length > 0 ? (
+            <ul className="space-y-0.5">
+              {trace.retrieved.map((r, i) => (
+                <li key={`${r.chunk_id}-${i}`} className="text-gray-600">
+                  [{i + 1}] 《{r.doc_name}》
+                  {r.score != null && (
+                    <span className="text-gray-400">（score {r.score.toFixed(3)}）</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-400">本轮未检索到课程资料</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * 自定义 Markdown 组件：增强标题、列表、代码块的显示效果
@@ -101,6 +166,7 @@ export default function ChatMessage({ message }: { message: Message }) {
           </ReactMarkdown>
         </div>
         {message.run && <RunResultPanel run={message.run} />}
+        {!isUser && message.run_id && <TracePanel runId={message.run_id} />}
         {message.citations.length > 0 && (
           <div className="mt-3 border-t border-gray-100 pt-2">
             <div className="text-xs text-gray-400 mb-1">参考资料</div>

@@ -34,6 +34,8 @@ export interface Message {
   citations: Citation[];
   run: RunResult | null;
   createdAt: string;
+  /** [2026-08-31] Harness·Observability：done 事件带回的轨迹 ID */
+  run_id?: string;
 }
 
 /** SSE 事件（契约 §2.2） */
@@ -41,8 +43,8 @@ export type SseEvent =
   | { event: "token"; data: { text: string } }
   | { event: "run"; data: RunResult }
   | { event: "citation"; data: { citations: Citation[] } }
-  | { event: "done"; data: { message_id: string } }
-  | { event: "error"; data: { code: string; message: string } };
+  | { event: "done"; data: { message_id: string; run_id?: string } }
+  | { event: "error"; data: { code: string; message: string; progress?: string; suggestion?: string } };
 
 /** 错误响应（契约 §0） */
 export interface ApiError {
@@ -109,6 +111,29 @@ export interface MockExamResponse {
   exam: string;
   answers: string;
   analysis: string;
+  task_id?: string;
+}
+
+/** [2026-08-31] Harness·Observability：单次答疑结构化轨迹 */
+export interface AgentRunTrace {
+  run_id: string;
+  conversation_id: string;
+  question: string;
+  retrieved: { chunk_id: string; doc_name: string; score: number | null }[];
+  prompt_tokens: number;
+  completion_tokens: number;
+  latency_ms: number;
+  cited_ids: string[];
+  error: string | null;
+  created_at: string;
+}
+
+export interface RunStats {
+  total: number;
+  avg_latency_ms: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  error_count: number;
 }
 
 /** 用户画像 */
@@ -134,4 +159,14 @@ export interface UserProfileResponse {
   strong_points: string[];
   suggestions: string[];
   statistics: UserProfileStatistics;
+  task_id?: string;
+  parse_status?: "ok" | "retried_ok" | "failed";
+  comparison?: MasteryComparison[];
+}
+
+/** [2026-08-31] Harness·Memory：增量画像对比 */
+export interface MasteryComparison {
+  name: string;
+  previous_mastery: number;
+  current_mastery: number;
 }

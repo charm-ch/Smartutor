@@ -1,16 +1,40 @@
-"""模拟试卷生成服务（M6）：基于历年真题生成风格类似的模拟试题。"""
-import asyncio
-import json
-import re
-from pathlib import Path
+"""模拟试卷生成服务（M6）：基于历年真题生成风格类似的模拟试题。
+
+[2026-08-31] Harness 加固：
+- Sensors：各阶段生成结果走 validate_markdown_section 非空校验（LLM 返回空内容直接报错）
+- Memory：task_state 检查点，每阶段（style_analysis/question_gen/answers）落库
+- Loop：异常带 stage/suggestion，错误响应为 {stage, detail, suggestion} 三元组
+"""
+import uuid
 
 from app.core import db
-from app.core.config import settings
-from app.services import llm
+from app.services import llm, validators
 
 
 class MockExamError(Exception):
-    """模拟试卷生成失败。"""
+    """模拟试卷生成失败。stage/suggestion 用于结构化错误上报（Harness·Loop）。"""
+
+    def __init__(self, message: str, stage: str = "", suggestion: str = ""):
+        super().__init__(message)
+        self.stage = stage
+        self.suggestion = suggestion
+
+
+def _new_task_id() -> str:
+    return f"task_{uuid.uuid4().hex[:12]}"
+
+
+async def _checkpoint(task_id: str, ref_id: str, status: str, stage: str, payload: dict) -> None:
+    """Memory 检查点：每完成一个阶段落一次库；顺带清理 7 天前过期任务。"""
+    await db.execute(
+        """INSERT INTO task_state (task_id, kind, ref_id, status, stage, payload, updated_at)
+           VALUES (%s, 'mock_exam', %s, %s, %s, %s, now())
+           ON CONFLICT (task_id) DO UPDATE
+           SET status=EXCLUDED.status, stage=EXCLUDED.stage,
+               payload=EXCLUDED.payload, updated_at=now()""",
+        (task_id, ref_id, status, stage, db.dumps(payload)),
+    )
+    await db.execute("DELETE FROM task_state WHERE updated_at < now() - interval '7 days'")
 
 
 async def generate_mock_exam(
@@ -28,20 +52,22 @@ async def generate_mock_exam(
         include_answers: 是否包含参考答案
     
     Returns:
-        {
-            "exam": "模拟试题内容（Markdown）",
-            "answers": "参考答案（Markdown）",
-            "analysis": "题目风格分析"
-        }
+        {exam, answers, analysis} + task_id / parse_status
     """
     # 1. 检索知识库中的历年真题
     from app.services import rag
-    
-    # 检索所有相关文档
+
+    task_id = _new_task_id()
     retrieved = await rag.retrieve(kb_id, "历年真题 模拟试题", top_k=10)
-    
+
     if not retrieved:
-        raise MockExamError("知识库中未找到相关题目，请先上传历年真题PDF")
+        raise MockExamError(
+            "知识库中未找到相关题目，请先上传历年真题PDF",
+            stage="retrieve",
+            suggestion="请确认该知识库已上传真题 PDF 且解析状态为 parsed",
+        )
+
+    await _checkpoint(task_id, kb_id, "running", "retrieve", {"chunks": len(retrieved)})
     
     # 2. 组装题目风格分析提示词
     style_analysis_prompt = f"""请分析以下历年真题的题目风格（题型、知识点分布、难度特点）：
@@ -56,11 +82,21 @@ async def generate_mock_exam(
 
 请用简洁的要点形式输出分析结果。"""
     
-    # 3. 调用LLM分析题目风格
+    # 3. 调用LLM分析题目风格（Sensors：输出非空校验）
     style_analysis = await llm.chat_once([
         {"role": "user", "content": style_analysis_prompt}
     ])
     style_text = style_analysis.get("content", "")
+    try:
+        validators.validate_markdown_section(style_text, min_length=50)
+    except validators.LLMJsonError as e:
+        await _checkpoint(task_id, kb_id, "failed", "style_analysis", {"error": str(e)})
+        raise MockExamError(
+            str(e), stage="style_analysis",
+            suggestion="风格分析输出异常，请重试一次；若持续失败请检查模型服务状态",
+        ) from None
+
+    await _checkpoint(task_id, kb_id, "running", "style_analysis", {"length": len(style_text)})
     
     # 4. 生成模拟试题
     difficulty_desc = {
@@ -108,6 +144,16 @@ async def generate_mock_exam(
         {"role": "user", "content": exam_prompt}
     ])
     exam_content = exam_result.get("content", "")
+    try:
+        validators.validate_markdown_section(exam_content, min_length=200)
+    except validators.LLMJsonError as e:
+        await _checkpoint(task_id, kb_id, "failed", "question_gen", {"error": str(e)})
+        raise MockExamError(
+            str(e), stage="question_gen",
+            suggestion="出题阶段输出过短或为空，请重试；可尝试降低题目数量",
+        ) from None
+
+    await _checkpoint(task_id, kb_id, "running", "question_gen", {"length": len(exam_content)})
     
     # 5. 生成参考答案
     answers_content = ""
@@ -140,9 +186,16 @@ async def generate_mock_exam(
             {"role": "user", "content": answers_prompt}
         ])
         answers_content = answers_result.get("content", "")
-    
-    return {
-        "exam": exam_content,
-        "answers": answers_content,
-        "analysis": style_text
-    }
+        try:
+            validators.validate_markdown_section(answers_content, min_length=100)
+        except validators.LLMJsonError as e:
+            await _checkpoint(task_id, kb_id, "failed", "answers", {"error": str(e)})
+            raise MockExamError(
+                str(e), stage="answers",
+                suggestion="答案生成异常，请重试；试题本身已生成，可关闭“包含答案”后重试",
+            ) from None
+
+    result = {"exam": exam_content, "answers": answers_content, "analysis": style_text}
+    await _checkpoint(task_id, kb_id, "done", "done", {"exam_length": len(exam_content)})
+    result["task_id"] = task_id
+    return result

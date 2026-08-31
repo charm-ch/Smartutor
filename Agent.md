@@ -121,11 +121,13 @@ bwrap 隔离，以下参数缺一不可（`app/services/sandbox.py`）：
 
 | 工具 | 用途 |
 |---|---|
+| `tools/ci-check.sh` | 一键回归：py_compile → validators 单测 → 沙箱测试 → 检索评测（[2026-08-31] 新增） |
 | `tools/retrieval-eval.sh` | 检索质量评测（20 问基准，要求 100% 命中） |
 | `tools/sandbox-test.sh` | 沙箱 7 项安全测试 |
 | `tools/gen-courseware.sh` | 生成 8 章 C 语言测试课件 PDF |
 | `tools/server-setup.sh` | 服务器初始化（依赖、数据库、systemd） |
 | `tools/start-tunnel.ps1` | SSH 反向隧道（本地代理访问外网/前端） |
+| `tools/hash-manifest.py` | 本地/服务器文件 MD5 清单一致性校验 |
 
 **验收基线**（MVP 已达成，回归时不得低于）：检索 20 问 100% 命中；SSE 全链路（token/run/citation/done + 历史持久化）；5 套真题 PDF 全解析（48 chunks，含 3 个扫描版 OCR）；模拟卷生成含风格分析+题目+LaTeX 详细答案。
 
@@ -134,3 +136,34 @@ bwrap 隔离，以下参数缺一不可（`app/services/sandbox.py`）：
 - 主分支 `main`，commit message 用英文祈使句，正文列功能点；
 - `.gitignore` 已覆盖 `node_modules/`、`.next/`、`.env*`、`data/`、`uploads/`、`__pycache__/`——新增敏感或大体积产物时同步补充；
 - 远程：`github.com/charm-ch/Smartutor`（SSH over 443 端口，见 `~/.ssh/config` 的 `Host github.com` 配置）。
+
+## 10. 规则优先级（[2026-08-31] Harness·Guides）
+
+冲突时的裁定顺序，从高到低：
+
+1. **本项目规则**（本文件第 6/7 节 + `docs/contracts.md` 冻结契约）
+2. **当前代码实际状态**（以 git main 为准，不以记忆/文档描述为准）
+3. **会话临时指令**（用户当次要求，可临时覆盖第 3 级以下约定，但不得违反第 1 级）
+4. **通用惯例**（各语言社区默认风格）
+
+## 11. 棘轮流程（Ratchet：错误只许降，不许升）
+
+同类错误出现 **三次** 即固化为结构性约束，不再依赖记忆与自觉：
+
+1. **触发**：出现一次真实事故（报错/返工/数据损坏）；
+2. **记录**：24h 内写入本文件第 6 节，格式：`编号. **一句话规则**。（事故一句话描述）`，标注日期与来源；
+3. **加固**：优先转化为代码约束（校验器/类型/CI 检查），而不是仅靠遵守；
+4. **清理**：每月一次通读第 6 节，删除相互矛盾或已被代码约束取代的条款。
+
+> 已固化的结构性约束示例：NUL 清洗（规则 4 → `rag._clean_text()`）、Sensors 校验（2026-08-31 画像空输出事故 → `validators.py`）、写操作认证（2026-08-31 审计 → `core/auth.py`）、任务检查点（→ `task_state` 表）。
+
+## 12. Harness 六层架构速查（[2026-08-31] 加固后）
+
+| 层 | 落点 | 要点 |
+|---|---|---|
+| Guides | 本文件 | 规则必须追溯到真实事故，按棘轮流程维护 |
+| Sensors | `app/services/validators.py` | LLM 输出 Schema 校验，失败重试 1 次再失败报错，禁止静默回退 |
+| Loop | `app/services/llm.py` + `config.py` | 重试≤2 次指数退避；32k token/60s 预算；错误带 {stage, detail, suggestion} |
+| Memory | `task_state` 表 | 长任务阶段检查点，>7 天自动清理；画像增量对比 |
+| Permissions | `app/core/auth.py` | 写操作 Bearer Token（`API_TOKEN` 非空启用）；上传 413/415；删除需 confirm |
+| Observability | `agent_runs` 表 + `/api/runs/*` | 每次答疑落检索块/得分/token/延迟；前端轨迹面板 |

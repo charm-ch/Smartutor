@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     # 服务
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Permissions 权限层：写操作 Bearer Token（留空 = 不启用，本地调试用）
+    api_token: str = ""
+
+    # Agentic Loop 预算（Harness·Loop：任何循环必须有停止条件）
+    request_token_budget: int = 32000  # 单次请求 prompt 估算 token 上限
+    request_time_budget: int = 60  # 单次请求总时长上限（秒）
+
 
 @lru_cache
 def get_settings() -> Settings:

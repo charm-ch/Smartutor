@@ -24,6 +24,44 @@ async def init_pool() -> None:
             open=True,
             kwargs={"autocommit": True},
         )
+        await _ensure_tables()
+
+
+async def _ensure_tables() -> None:
+    """确保 Harness 新增表存在（幂等）。
+
+    [2026-08-31] Observability/Memory 层新增：
+    - agent_runs：每次答疑的结构化轨迹（检索块/得分/token/延迟）
+    - task_state：长任务检查点（生成类任务的阶段进度，支持断点查询）
+    """
+    await execute(
+        """CREATE TABLE IF NOT EXISTS agent_runs (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            question TEXT NOT NULL,
+            retrieved JSONB DEFAULT '[]',
+            prompt_tokens INTEGER DEFAULT 0,
+            completion_tokens INTEGER DEFAULT 0,
+            latency_ms INTEGER DEFAULT 0,
+            cited_ids JSONB DEFAULT '[]',
+            error TEXT,
+            created_at TIMESTAMPTZ DEFAULT now()
+        )"""
+    )
+    await execute(
+        """CREATE TABLE IF NOT EXISTS task_state (
+            task_id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            ref_id TEXT,
+            status TEXT NOT NULL,
+            stage TEXT DEFAULT '',
+            payload JSONB DEFAULT '{}',
+            updated_at TIMESTAMPTZ DEFAULT now()
+        )"""
+    )
+    await execute(
+        "CREATE INDEX IF NOT EXISTS idx_agent_runs_conv ON agent_runs (conversation_id)"
+    )
 
 
 async def close_pool() -> None:

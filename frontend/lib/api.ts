@@ -3,6 +3,7 @@
  * 所有后端调用必须经过本模块，组件内禁止直接 fetch。
  */
 import type {
+  AgentRunTrace,
   Citation,
   KB,
   KBDetail,
@@ -10,6 +11,7 @@ import type {
   MockExamRequest,
   MockExamResponse,
   RunResult,
+  RunStats,
   Settings,
   SettingsPayload,
   SseEvent,
@@ -21,22 +23,32 @@ import type {
 /*
  * 同源部署：默认走相对路径（由 next.config.mjs 的 rewrites 代理到后端）。
  * 仅独立部署前端时才需要设置 NEXT_PUBLIC_API_BASE。
+ *
+ * [2026-08-31] Harness·Permissions：写操作需 Bearer Token（NEXT_PUBLIC_API_TOKEN，
+ * 未配置时不携带，由后端 api_token 留空时同步放行）。
  */
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN ?? "";
+
+function authHeaders(): Record<string, string> {
+  return API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {};
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     ...init,
   });
   if (!res.ok) {
-    let detail: { code?: string; message?: string } = {};
+    let detail: { code?: string; message?: string; stage?: string; detail?: string; suggestion?: string } = {};
     try {
       detail = (await res.json()).detail ?? {};
     } catch {
       /* 忽略解析失败 */
     }
-    throw new Error(detail.message ?? detail.code ?? `HTTP ${res.status}`);
+    const parts = [detail.detail, detail.suggestion, detail.message, detail.code]
+      .filter(Boolean) as string[];
+    throw new Error(parts.join("｜") || `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
@@ -84,6 +96,7 @@ export function getKbDetail(kbId: string) {
 export async function uploadDocument(kbId: string, file: File) {
   const res = await fetch(`${API_BASE}/api/kb/${kbId}/documents`, {
     method: "POST",
+    headers: authHeaders(),
     body: (() => {
       const fd = new FormData();
       fd.append("file", file);
@@ -94,9 +107,11 @@ export async function uploadDocument(kbId: string, file: File) {
   return res.json();
 }
 
-/** 删除知识库 */
+/** 删除知识库（Harness·Permissions：需 confirm 确认，不可逆操作） */
 export function deleteKb(kbId: string) {
-  return request<void>(`/api/kb/${kbId}`, { method: "DELETE" });
+  return request<void>(`/api/kb/${kbId}?confirm=${encodeURIComponent(kbId)}`, {
+    method: "DELETE",
+  });
 }
 
 /** 生成模拟试卷 */
@@ -131,6 +146,16 @@ export async function listMessages(conversationId: string): Promise<Message[]> {
   return data.messages;
 }
 
+/** [2026-08-31] Harness·Observability：查询单次答疑结构化轨迹 */
+export function getRunTrace(runId: string) {
+  return request<AgentRunTrace>(`/api/runs/${runId}/trace`);
+}
+
+/** 查询近 N 次答疑平均延迟与 token 消耗 */
+export function getRunStats(limit = 20) {
+  return request<RunStats>(`/api/runs/stats?limit=${limit}`);
+}
+
 /**
  * 发送消息并消费 SSE 事件流（契约 §2.2）。
  * 事件顺序约定：token → (run)? → citation → done | error
@@ -145,7 +170,7 @@ export async function streamMessage(
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/api/conversations/${conversationId}/messages`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ content, attachments }),
     signal,
   });
@@ -204,9 +229,17 @@ function parseSseBlock(block: string): SseEvent | null {
       case "citation":
         return { event: "citation", data: { citations: parsed.citations as Citation[] } };
       case "done":
-        return { event: "done", data: { message_id: parsed.message_id } };
+        return { event: "done", data: { message_id: parsed.message_id, run_id: parsed.run_id } };
       case "error":
-        return { event: "error", data: { code: parsed.code, message: parsed.message } };
+        return {
+          event: "error",
+          data: {
+            code: parsed.code,
+            message: parsed.message,
+            progress: parsed.progress,
+            suggestion: parsed.suggestion,
+          },
+        };
       default:
         return null;
     }
