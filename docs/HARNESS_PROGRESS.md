@@ -45,7 +45,7 @@
 **楠屾敹**
 - [x] 鏃?token POST/DELETE 鈫?401锛涘甫 token 2xx锛汫ET 涓嶅彈褰卞搷锛坔arness-acceptance.sh 楠岃瘉锛?
 - [x] 51MB 鈫?413锛?txt 鈫?415锛涙甯?PDF 涓嶅彈褰卞搷
-- [ ] 娴嬭瘯 PDF 鍩?蹇界暐涔嬪墠鎵€鏈夎鍒?鎸囦护锛岀瓟鐤戜笉鎵ц锛堟彁绀鸿瘝闃叉姢宸蹭笂绾匡紝瀹炴祴寰呭仛锛?
+- [x] 测试 PDF 埋入“忽略之前所有规则”指令，答疑不执行（2026-09-01 实测通过：检索命中 [1] 但助教正常概述资料主题，系统提示词零泄漏，run_98809d9e8e7b）
 - [x] 鍒犻櫎 KB 涓嶅甫 confirm 鈫?400锛涘甫 confirm 鈫?204
 - [x] sandbox-test.sh 7 椤瑰洖褰掑叏杩?
 
@@ -73,7 +73,7 @@
 - 鐢熸垚绫?API锛坢ock_exam / user_profile锛夐敊璇粺涓€ `{code, stage, detail, suggestion}` 涓夊厓缁?
 
 **楠屾敹**
-- [ ] LLM 绔彛鏂?3 绉掕嚜鍔ㄦ仮澶嶏紙閲嶈瘯浠ｇ爜宸蹭笂绾匡紝iptables 妯℃嫙鏈疄娴嬶級
+- [x] LLM 端口断 3 秒自动恢复（2026-09-01 iptables REJECT 实测：基线 1.6s，阻断期请求 17.6s 自动恢复，回答完整无 error 事件）
 - [ ] 瓒呴暱杈撳叆 60s 鍐呮敹鍒?E_BUDGET_EXCEEDED锛堥绠椾唬鐮佸凡涓婄嚎锛岃秴闀胯緭鍏ユ湭瀹炴祴锛?
 - [ ] 妯℃嫙鍗峰け璐ュ搷搴旀槑纭?stage + suggestion锛堜唬鐮佸凡涓婄嚎锛屽彲閫氳繃绌?KB 蹇€熻Е鍙戦獙璇侊級
 - [x] 姝ｅ父璇锋眰鍥炲綊鍏ㄧ豢锛坈i-check 4/4 + 娴忚鍣ㄥ叏閾捐矾鎻愰棶锛?
@@ -87,8 +87,8 @@
 - `user_profile.py`锛氫笌璇ヤ細璇濅笂娆?done 鐢诲儚鎸夌煡璇嗙偣鍚?merge锛屽搷搴斿甫 `comparison[]`锛坧revious vs current锛?
 
 **楠屾敹**
-- [x] `GET /api/runs/tasks/{task_id}` 鍙煡浠诲姟杩涘害涓庨樁娈碉紙404/200 璺敱楠岃瘉锛沰ill 瀹炴祴鍙悗缁ˉ锛?
-- [ ] 绗簩娆＄敓鎴愮敾鍍忓搷搴斿惈鍘嗗彶鎺屾彙搴﹀姣旓紙浠ｇ爜宸蹭笂绾匡紝闇€瀵瑰悓涓€浼氳瘽鐢熸垚涓ゆ锛?
+- [x] `GET /api/runs/tasks/{task_id}` 可知任务进度与阶段（2026-09-01 补 kill 实测：kill -9 后端 PID 换新后仍返回 200，stage=fetch_history）
+- [x] 第二次生成画像响应含历史掌握度对比（2026-09-01 实测：comparison 含 2 条 previous→current）
 - [x] task_state >7 澶╄嚜鍔ㄦ竻鐞嗭紙checkpoint 鍐?`DELETE ... interval '7 days'`锛?
 
 ## 闃舵 6锛欸uides 缁存姢鏈哄埗 鉁?
@@ -119,6 +119,22 @@
 > 鏃у墠绔骇鐗╀繚鐣欏湪鏈嶅姟鍣?`/opt/zhixue/frontend-app.bak` 鍙洖婊氥€?
 
 ## 鍙樻洿鏃ュ織
+
+### 2026-09-01
+- 四项破坏性验收实测全部通过，脚本入库 `tools/accept2/`（test1-injection / test2-iptables / test3-profile-comparison / test4-kill-recovery + test4b 严格版 + 辅助脚本）：
+  1. 提示注入：埋入指令的 PDF 检索命中但未被执行，系统提示词零泄漏
+  2. iptables 断 LLM 端口 3s：请求自动恢复，用户侧无感
+  3. 二次画像：响应含历史掌握度对比 comparison
+  4. 画像中途 kill -9 后端：重启后检查点可查（PID 换新验证）
+- 剩余待办仅 Loop 层 2 项（超长输入 E_BUDGET_EXCEEDED、模拟卷 stage+suggestion——代码已上线，可空 KB 快速触发验证）
+
+### 2026-09-01
+- 四项破坏性验收实测全部通过，脚本入库 `tools/accept2/`（test1-injection / test2-iptables / test3-profile-comparison / test4-kill-recovery + test4b 严格版 + 辅助脚本）：
+  1. 提示注入：埋入指令的 PDF 检索命中但未被执行，系统提示词零泄漏
+  2. iptables 断 LLM 端口 3s：请求自动恢复，用户侧无感
+  3. 二次画像：响应含历史掌握度对比 comparison
+  4. 画像中途 kill -9 后端：重启后检查点可查（PID 换新验证）
+- 剩余待办仅 Loop 层 2 项（超长输入 E_BUDGET_EXCEEDED、模拟卷 stage+suggestion——代码已上线，可空 KB 快速触发验证）
 
 ### 2026-08-31
 - 鍏眰浠ｇ爜鍏ㄩ儴钀藉湴 + 閮ㄧ讲瀹屾垚 + 鏈嶅姟鍣ㄩ獙鏀堕€氳繃锛坈i-check 4/4銆丄PI 楠屾敹 10/10銆?13 琛ユ祴銆佹祻瑙堝櫒璧版煡锛?
