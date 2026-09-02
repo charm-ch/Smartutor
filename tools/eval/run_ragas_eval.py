@@ -175,6 +175,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--kb", default=None)
     ap.add_argument("--limit", type=int, default=20)
+    ap.add_argument("--dataset", default=None, help="已有 dataset.json 路径，提供则跳过生成阶段")
     args = ap.parse_args()
 
     from ragas import evaluate, RunConfig
@@ -191,9 +192,15 @@ def main() -> None:
     base_url, key, chat_model = cfg["api_base_url"], cfg["api_key"], cfg["chat_model"]
     embed_model = cfg.get("embedding_model") or "BAAI/bge-small-zh-v1.5"
 
-    kb_id = pick_kb(args.kb)
-    log(f"== 阶段 1/2：真实链路生成 {args.limit} 条 QA（KB={kb_id}）==")
-    rows = asyncio.run(build_rows(kb_id, args.limit))
+    kb_id = args.kb or "(dataset)"
+    if args.dataset:
+        with open(args.dataset, encoding="utf-8") as f:
+            rows = json.load(f)
+        log(f"载入已有评测数据集 {args.dataset}（{len(rows)} 条），跳过生成阶段")
+    else:
+        kb_id = pick_kb(args.kb)
+        log(f"== 阶段 1/2：真实链路生成 {args.limit} 条 QA（KB={kb_id}）==")
+        rows = asyncio.run(build_rows(kb_id, args.limit))
 
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_base = os.path.join(OUT_DIR, f"ragas-report-{ts}")
@@ -214,7 +221,7 @@ def main() -> None:
         metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
         llm=judge,
         embeddings=emb,
-        run_config=RunConfig(max_workers=2, max_retries=2, timeout=300),
+        run_config=RunConfig(max_workers=6, max_retries=2, timeout=600),
         show_progress=True,
     )
 
