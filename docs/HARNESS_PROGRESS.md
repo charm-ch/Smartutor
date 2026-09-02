@@ -122,6 +122,8 @@
 
 ### 2026-09-02
 - 本文全量修复 mojibake：早期写入部分是 UTF-8 字节被按 GBK 误解码固化的乱码（有损，含 PUA 字符），按已知内容重写为纯 UTF-8；同时去重了 2026-09-01 变更日志
+- RAGAS 评测落地：ragas 0.4.3 装入 backend/.venv（USTC 镜像，pip freeze 快照可回滚）；新建 `tools/eval/run_ragas_eval.py`——检索与提示词走生产同款链路（rag.retrieve + _SYSTEM_PROMPT + _build_context + chat_once），20 题 C 语言 QA（源自 retrieval-eval.sh，补人工参考答案），GLM 作 judge、本地 bge-small-zh-v1.5 作 embeddings，评 faithfulness / answer_relevancy / context_precision / context_recall。
+- RAGAS 首测结果（GLM api_key 限流，80 个评审单元 71 有效）：faithfulness 0.72 / answer_relevancy 0.59 / context_precision 0.80 / context_recall 0.87；报告入库 `docs/eval/ragas-report-20260902.md`。经验：judge 并发 6 会触发 429，复跑用 `--dataset <path>` 跳过生成阶段并降 max_workers。
 - 对照原文完成六层复评，识别剩余差距：速率限制（Permissions）、熔断线（Observability）、检查点断点续跑（Memory）、agent_runs 缺重试次数字段、评测集"自己出题自己考"风险
 
 ### 2026-09-01
