@@ -128,14 +128,6 @@
   4. 画像中途 kill -9 后端：重启后检查点可查（PID 换新验证）
 - 剩余待办仅 Loop 层 2 项（超长输入 E_BUDGET_EXCEEDED、模拟卷 stage+suggestion——代码已上线，可空 KB 快速触发验证）
 
-### 2026-09-01
-- 四项破坏性验收实测全部通过，脚本入库 `tools/accept2/`（test1-injection / test2-iptables / test3-profile-comparison / test4-kill-recovery + test4b 严格版 + 辅助脚本）：
-  1. 提示注入：埋入指令的 PDF 检索命中但未被执行，系统提示词零泄漏
-  2. iptables 断 LLM 端口 3s：请求自动恢复，用户侧无感
-  3. 二次画像：响应含历史掌握度对比 comparison
-  4. 画像中途 kill -9 后端：重启后检查点可查（PID 换新验证）
-- 剩余待办仅 Loop 层 2 项（超长输入 E_BUDGET_EXCEEDED、模拟卷 stage+suggestion——代码已上线，可空 KB 快速触发验证）
-
 ### 2026-08-31
 - 鍏眰浠ｇ爜鍏ㄩ儴钀藉湴 + 閮ㄧ讲瀹屾垚 + 鏈嶅姟鍣ㄩ獙鏀堕€氳繃锛坈i-check 4/4銆丄PI 楠屾敹 10/10銆?13 琛ユ祴銆佹祻瑙堝櫒璧版煡锛?
 - 鏂板鏂囦欢锛歚validators.py`銆乣auth.py`銆乣runs.py`銆乣ci-check.sh`銆乣smoke_validators.py`銆乣harness-acceptance.sh`銆乣harness-tables.sql`銆乣harness-grants.sql`銆乣deploy-token.sh`銆乣local-build.ps1`銆佹湰鏂囦欢
